@@ -2,8 +2,9 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,6 +12,7 @@ from app import models
 from app.certificates import OUTPUT_DIR, generate_certificate
 from app.database import Base, SessionLocal, engine, get_db
 from app.schemas import CertificateRequest
+from app.pdf_import import MAX_UPLOAD_SIZE, parse_student_pdf
 
 
 @asynccontextmanager
@@ -24,6 +26,17 @@ app = FastAPI(
     description="API for generating and retrieving bulk certificates.",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 
@@ -47,6 +60,36 @@ def validate_request(request: CertificateRequest):
             for item in request.recipients
         ],
     }
+
+
+@app.post("/import-students-pdf")
+async def import_students_pdf(file: UploadFile = File(...)):
+    """Parse and validate a student-list PDF without creating a job."""
+
+    if file.content_type != "application/pdf":
+        raise HTTPException(
+            status_code=415,
+            detail="Upload a PDF file with content type application/pdf.",
+        )
+
+    contents = bytearray()
+    while chunk := await file.read(1024 * 1024):
+        contents.extend(chunk)
+        if len(contents) > MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail="The uploaded PDF is too large. Maximum size is 10 MB.",
+            )
+
+    if not contents:
+        raise HTTPException(status_code=400, detail="The uploaded PDF is empty.")
+    if not contents.startswith(b"%PDF-"):
+        raise HTTPException(status_code=415, detail="The uploaded file is not a valid PDF.")
+
+    try:
+        return parse_student_pdf(bytes(contents))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
 
 
 def process_generation_job(job_id: int) -> None:

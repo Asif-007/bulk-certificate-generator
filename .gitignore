@@ -27,4 +27,10 @@ generated_certificates/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
   

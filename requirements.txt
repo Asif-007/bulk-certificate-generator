@@ -6,3 +6,5 @@ reportlab
 pytest
 httpx
 email-validator
+pdfplumber
+python-multipart

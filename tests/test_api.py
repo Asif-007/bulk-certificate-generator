@@ -1,5 +1,8 @@
+from io import BytesIO
+
 import pytest
 from fastapi.testclient import TestClient
+from reportlab.pdfgen import canvas
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -58,6 +61,18 @@ def valid_payload():
             {"name": "Rahul", "email": "rahul@example.com"},
         ],
     }
+
+
+def student_pdf(*rows):
+    output = BytesIO()
+    document = canvas.Canvas(output)
+    document.drawString(72, 760, "Name | Email")
+    y_position = 740
+    for name, email in rows:
+        document.drawString(72, y_position, f"{name} | {email}")
+        y_position -= 20
+    document.save()
+    return output.getvalue()
 
 
 def test_health_endpoint(test_client):
@@ -212,3 +227,103 @@ def test_recipient_from_another_job_returns_404(test_client):
     )
 
     assert response.status_code == 404
+
+
+def test_import_students_pdf_returns_valid_rows(test_client):
+    response = test_client.post(
+        "/import-students-pdf",
+        files={
+            "file": (
+                "students.pdf",
+                student_pdf(("Asif", "asif@example.com"), ("Rahul", "rahul@example.com")),
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"] == {
+        "total_candidates": 2,
+        "valid_count": 2,
+        "invalid_count": 0,
+        "duplicate_count": 0,
+        "requires_correction": False,
+    }
+    assert [row["email"] for row in body["rows"]] == [
+        "asif@example.com",
+        "rahul@example.com",
+    ]
+
+
+def test_import_students_pdf_reports_invalid_and_duplicate_rows(test_client):
+    response = test_client.post(
+        "/import-students-pdf",
+        files={
+            "file": (
+                "students.pdf",
+                student_pdf(
+                    ("Asif", "asif@example.com"),
+                    ("Rahul", "asif@example.com"),
+                    ("", "not-an-email"),
+                ),
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["duplicate_count"] == 2
+    assert body["summary"]["invalid_count"] == 3
+    assert any("Duplicate email" in error for error in body["rows"][0]["errors"])
+    assert any("valid email" in error for error in body["rows"][2]["errors"])
+
+
+def test_import_students_pdf_does_not_create_a_job(test_client):
+    response = test_client.post(
+        "/import-students-pdf",
+        files={"file": ("students.pdf", student_pdf(("Asif", "asif@example.com")), "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert test_client.get("/jobs/1").status_code == 404
+
+
+def test_import_students_pdf_rejects_invalid_uploads(test_client):
+    invalid_response = test_client.post(
+        "/import-students-pdf",
+        files={"file": ("students.txt", b"not a pdf", "text/plain")},
+    )
+    empty_response = test_client.post(
+        "/import-students-pdf",
+        files={"file": ("empty.pdf", b"", "application/pdf")},
+    )
+
+    assert invalid_response.status_code == 415
+    assert empty_response.status_code == 400
+
+
+def test_import_students_pdf_rejects_oversized_upload(test_client):
+    response = test_client.post(
+        "/import-students-pdf",
+        files={
+            "file": (
+                "large.pdf",
+                b"%PDF-" + (b"x" * (10 * 1024 * 1024)),
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 413
+
+
+def test_import_students_pdf_rejects_image_only_or_unknown_pdf(test_client):
+    response = test_client.post(
+        "/import-students-pdf",
+        files={"file": ("unknown.pdf", b"%PDF-1.4\n%%EOF", "application/pdf")},
+    )
+
+    assert response.status_code == 422
+    assert "could not be read" in response.json()["detail"]
