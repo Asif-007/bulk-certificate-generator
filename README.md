@@ -1,52 +1,89 @@
 # Bulk Certificate Generator
 
-A FastAPI backend that accepts bulk certificate-generation requests, validates recipient information, generates individual PDF certificates, tracks job progress, and exposes endpoints to retrieve generated certificates.
+A full-stack application for generating individual PDF certificates in bulk. Institutes can enter student details manually or upload a text-based PDF containing a student list. The application validates recipient information, generates certificates, tracks processing progress, and provides individual PDF downloads.
 
 ## Features
 
-- **Bulk requests:** Submit certificate details and multiple recipients in one API request.
-- **Input validation:** Validate request fields, email addresses, dates, and recipient counts.
-- **Individual PDF certificates:** Generate a separate PDF for each recipient using ReportLab.
-- **Job tracking:** Track processing status, total recipients, successful generations, failures, and progress percentage.
-- **Failure isolation:** A certificate-generation failure for one recipient does not stop processing other recipients.
-- **Certificate retrieval:** Download a generated PDF using its job and recipient IDs.
-- **Persistent records:** Store jobs and recipient outcomes in SQLite using SQLAlchemy.
-- **PDF student import:** Parse a text-based `Name | Email` student list into an editable, validated preview.
-- **Theme support:** Switch between light and dark themes with a persisted preference.
-- **Automated tests:** Test API validation, job processing, progress, failure handling, and downloads.
+- Manual entry of course information and multiple recipients.
+- Bulk student import from text-based PDFs.
+- Validation of student names, email addresses, and duplicate records.
+- Editable preview of imported student records before submission.
+- Individual PDF certificate generation using ReportLab.
+- Job status and progress tracking.
+- Recipient-level success and failure reporting.
+- Certificate downloads through the API.
+- Responsive React frontend with dark and light themes.
+- Automated backend tests using pytest.
 
 ## Technology Stack
 
+**Backend**
 - Python
 - FastAPI
-- SQLite
-- SQLAlchemy
-- ReportLab
 - Pydantic
-- pytest
-- HTTPX
+- SQLAlchemy
+- SQLite
+- ReportLab
 - pdfplumber
 - python-multipart
 
+**Frontend**
+- React
+- Vite
+- JavaScript
+- CSS
+
+**Testing**
+- pytest
+- HTTPX
+
+## Project Structure
+
+```text
+bulk-certificate-generator/
+├── app/
+│   ├── main.py
+│   ├── schemas.py
+│   ├── models.py
+│   ├── database.py
+│   ├── certificates.py
+│   └── pdf_import.py
+├── tests/
+│   └── test_api.py
+├── frontend/
+│   ├── src/
+│   ├── package.json
+│   ├── vite.config.js
+│   └── .env.example
+├── generated_certificates/
+├── certificate_generator.db
+├── requirements.txt
+├── .gitignore
+└── README.md
+```
+
+The SQLite database and generated certificate directory are created locally when the application runs. Runtime artifacts are excluded from version control.
+
 ## Prerequisites
 
-- Python 3.12 or later recommended
-- Git
+- Python 3.12 or later recommended.
+- Node.js and npm.
+- Git.
 
-The project has been developed and tested in a Python 3.14 virtual environment.
+The project has been developed and tested using Python 3.14.5.
 
-## Local Setup
+## 1. Clone the Repository
 
-Clone the repository and enter the project directory:
-
-```powershell
+```bash
 git clone https://github.com/Asif-007/bulk-certificate-generator.git
 cd bulk-certificate-generator
 ```
 
+## 2. Set Up the Backend
+
 Create a virtual environment:
 
-```bash
+```powershell
 python -m venv .venv
 ```
 
@@ -56,63 +93,100 @@ Activate it on Windows PowerShell:
 .\.venv\Scripts\Activate.ps1
 ```
 
-On macOS or Linux:
-
-```bash
-source .venv/bin/activate
-```
-
-Install dependencies:
+Install backend dependencies:
 
 ```powershell
 python -m pip install -r requirements.txt
 ```
 
-## Running the Backend
+## 3. Set Up the Frontend
 
-Start the development server from the project root:
+Open a separate terminal at the project root:
+
+```powershell
+cd frontend
+npm install
+```
+
+If `frontend/.env.example` is provided, copy it to `.env` and adjust the API URL if necessary:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+The default local backend URL is:
+
+```text
+http://127.0.0.1:8000
+```
+
+The frontend uses the `VITE_API_BASE_URL` environment variable for API configuration, if configured in the application.
+
+## 4. Run the Application
+
+### Start the backend
+
+From the project root, with the virtual environment activated:
 
 ```powershell
 python -m uvicorn app.main:app --reload
 ```
 
-The API will be available at:
+The backend is available at:
 
 - API base URL: `http://127.0.0.1:8000`
-- Interactive Swagger documentation: `http://127.0.0.1:8000/docs`
-- Health endpoint: `http://127.0.0.1:8000/health`
+- Interactive API documentation: `http://127.0.0.1:8000/docs`
+- Health check: `http://127.0.0.1:8000/health`
 
-The SQLite database is created locally as `certificate_generator.db`. Generated PDF files are stored in `generated_certificates/`.
+### Start the frontend
 
-## Running the Frontend
-
-Open a second PowerShell terminal:
+In a second terminal:
 
 ```powershell
 cd frontend
-Copy-Item .env.example .env
-npm install
 npm run dev
 ```
 
-Open the Vite URL (normally `http://localhost:5173`). The frontend defaults
-to `http://127.0.0.1:8000`; set `VITE_API_BASE_URL` in `frontend/.env` to use
-another backend. The API explicitly allows the two local Vite origins.
+Open the local URL printed by Vite, normally:
 
-## API Endpoints
+`http://localhost:5173`
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/health` | Check API availability |
-| POST | `/validate-request` | Validate and inspect a certificate request |
-| POST | `/import-students-pdf` | Parse and validate an uploaded student-list PDF without creating a job |
-| POST | `/jobs` | Create a bulk generation job |
-| GET | `/jobs/{job_id}` | Retrieve job status, progress, and recipient outcomes |
-| GET | `/jobs/{job_id}/recipients/{recipient_id}/certificate` | Download a generated certificate |
+Both servers must be running to use the complete application.
 
-### Create a generation job
+## 5. Submit a Certificate Generation Request
 
-Send a `POST` request to `/jobs` with a JSON body:
+The frontend provides two ways to supply recipients.
+
+### Option A: Manual entry
+
+1. Open the frontend.
+2. Enter the course name, issuer, and completion date.
+3. Add student names and email addresses.
+4. Review the recipient details.
+5. Submit the request to generate certificates.
+
+### Option B: Upload a student-list PDF
+
+1. Select the PDF upload option.
+2. Upload a text-based PDF containing student names and email addresses.
+3. Review the extracted student records.
+4. Correct invalid entries and remove unwanted or duplicate records.
+5. Confirm the recipient list.
+6. Submit the generation job.
+
+The PDF import feature is intended for structured, text-based student lists. Scanned or image-only PDFs may not be supported without OCR. The application should display an error if the document cannot be parsed.
+
+### API request example
+
+A bulk request can also be submitted directly through Swagger UI or an HTTP client.
+
+Send a `POST` request to:
+
+```text
+http://127.0.0.1:8000/jobs
+```
+
+Example JSON body:
 
 ```json
 {
@@ -134,207 +208,160 @@ Send a `POST` request to `/jobs` with a JSON body:
 }
 ```
 
-A successful request returns HTTP `202 Accepted` with the job ID and initial status.
+A successful request returns HTTP `202 Accepted` with a job ID and its initial status.
 
-### Import students from a PDF
+Invalid requests return HTTP `422 Unprocessable Entity`.
 
-Send a multipart `POST` request to `/import-students-pdf` with a field named
-`file`. The upload must be a real PDF (the server checks both the declared
-content type and `%PDF-` signature), must be non-empty, and must be no larger
-than 10 MB. The endpoint only parses and validates; it never creates a
-generation job.
+## 6. Retrieve Job Status and Progress
 
-The supported layout is a text-based table with a recognizable header row:
+Use the job ID returned by the creation endpoint.
 
-```text
-Name | Email
-Asif Khan | asif@example.com
-Rahul Das | rahul@example.com
-```
-
-`Full Name`, `Student Name`, and `Email Address` are also recognized. Pipe,
-comma, tab-separated, and extracted table columns are supported. Multiple
-pages are supported. The response contains `rows` with stable `row_id` values,
-normalized `name` and `email` values, row-specific `errors`, and a
-`duplicate` flag. Its `summary` reports `total_candidates`, `valid_count`,
-`invalid_count`, `duplicate_count`, and `requires_correction`.
-
-Missing names, malformed emails, names over 100 characters, and
-case-insensitive duplicate emails are reported rather than silently dropped.
-The frontend lets users edit or remove rows and must receive an explicit
-confirmation before submitting the corrected list through the existing `/jobs`
-endpoint. The server remains authoritative and revalidates the final request.
-
-Scanned/image-only PDFs, arbitrary prose, password-protected PDFs, corrupted
-files, and PDFs without a supported table header are not supported. OCR is
-intentionally out of scope; use a text-based PDF export instead.
-
-### Check job progress
-
-Use the returned job ID:
+Send a `GET` request to:
 
 ```text
 GET /jobs/{job_id}
 ```
 
-The response includes:
+Example:
 
-- Job status
-- Total, successful, and failed recipient counts
-- Processed recipient count
-- Progress percentage
-- Individual recipient outcomes
-- Certificate download URLs for successful recipients
+```text
+http://127.0.0.1:8000/jobs/1
+```
 
-### Download a certificate
+The response includes job status, course details, recipient totals, successful and failed counts, processed count, progress percentage, and individual recipient outcomes.
 
-Use the job ID and recipient ID from the status response:
+Possible final job statuses include:
+
+- `completed`: All recipients succeeded.
+- `partially_failed`: Some recipients succeeded while others failed.
+- `failed`: No recipients succeeded.
+
+The frontend polls the status endpoint while processing is in progress and displays the latest results.
+
+## 7. Retrieve Generated Certificates
+
+Each successful recipient has a certificate download URL in the job status response.
+
+Use:
 
 ```text
 GET /jobs/{job_id}/recipients/{recipient_id}/certificate
 ```
 
-A successful request returns a PDF file. Missing jobs, mismatched job-recipient IDs, and unavailable certificates return HTTP `404 Not Found`.
-
-## Processing and Failure Handling
-
-The API uses FastAPI `BackgroundTasks` to process certificate-generation jobs after accepting the request.
-
-Each recipient is processed independently. Successful generations store the certificate file path, while failures record an error message and update the failure count.
-
-The job status is finalized as:
-
-- `completed`: All recipients succeeded.
-- `partially_failed`: Some recipients succeeded and some failed.
-- `failed`: No recipients succeeded.
-
-Progress is calculated from the number of successful and failed recipients relative to the total recipient count.
-
-**Limitation:** FastAPI `BackgroundTasks` is not a durable job queue. If the application process stops unexpectedly, in-progress work is not guaranteed to resume automatically. A production deployment could use a durable worker system such as Celery with a message broker.
-
-## Database Design
-
-The application uses two relational tables:
-
-### `generation_jobs`
-
-Stores the shared certificate information, job status, creation timestamp, recipient totals, success count, and failure count.
-
-### `recipient_results`
-
-Stores each recipient's name, email, processing status, generated file path, and any error message. Each record references its parent job through `job_id`.
-
-This structure allows job-level progress tracking while preserving the outcome of each recipient separately.
-
-## Running Automated Tests
-
-Run the complete test suite from the project root:
-
-```bash
-python -m pytest -v
-```
-
-The test suite covers:
-
-- Health endpoint behavior
-- Invalid email and empty recipient-list validation
-- Job creation and processing
-- Progress and recipient status tracking
-- Certificate downloads
-- Individual-recipient failure isolation
-- Nonexistent job handling
-- Mismatched job and recipient handling
-- Student-list PDF extraction, validation, duplicate detection, and upload limits
-
-Tests use a temporary SQLite database to isolate test data from the development database.
-
-## Project Structure
+Example:
 
 ```text
-bulk-certificate-generator/
-├── app/
-│   ├── main.py          # API routes and job processing
-│   ├── pdf_import.py    # Safe text-based student PDF parsing
-│   ├── database.py      # Database engine and sessions
-│   ├── models.py        # SQLAlchemy database models
-│   ├── schemas.py       # Pydantic request validation
-│   └── certificates.py  # PDF certificate generation
-├── tests/
-│   └── test_api.py      # Automated API tests
-├── frontend/
-│   ├── src/             # React form, polling, results, and styles
-│   ├── .env.example
-│   ├── package.json
-│   └── vite.config.js
-├── generated_certificates/
-├── certificate_generator.db
-├── requirements.txt
-├── .gitignore
-└── README.md
+http://127.0.0.1:8000/jobs/1/recipients/1/certificate
 ```
 
-The database and generated certificates are local runtime artifacts and are excluded from version control.
+A successful request returns a PDF file with the `application/pdf` media type.
 
-## Using the Complete Application
+The endpoint checks that the recipient belongs to the requested job and that the certificate file is available. Missing jobs, mismatched job-recipient IDs, and unavailable certificates return HTTP `404 Not Found`.
 
-1. Start the backend and frontend in separate PowerShell terminals.
-2. Enter the course details and at least one recipient, adding rows as needed.
-3. Select **Generate certificates**.
-4. The results card polls while the job is pending or processing and displays
-   progress, counts, and each recipient outcome.
-5. Select **Download PDF** for successful recipients. Failed recipients show
-   their backend error while other recipients continue processing.
-6. Select **Start another job** after a terminal result to begin again.
+## 8. PDF Student Import
 
-To use PDF import, choose **Upload student PDF**, drop or browse for a PDF,
-review the extraction summary, correct or remove invalid rows, check the
-confirmation box, and then select **Confirm and generate certificates**.
-Switching between input modes preserves the manual rows and imported preview
-data rather than silently discarding either list. Use the theme button in the
-header to switch between light and dark mode; the selection is stored in
-browser local storage.
+The PDF import endpoint is:
 
-The frontend handles client-side required-field and email validation plus
-backend `422`, `404`, `5xx`, and network errors. Run its production check with
-`npm run build` from `frontend`; no separate lint or type-check script is
-configured for this small JavaScript application.
+```text
+POST /import-students-pdf
+```
 
-## Design Decisions and Limitations
+It accepts a PDF upload using multipart form data and returns extracted student records and validation information for preview.
 
-- Native `fetch` is used to keep dependencies minimal. Polling runs every 1.5
-  seconds only for non-terminal jobs, prevents overlapping requests, and is
-  cleaned up when polling stops.
-- The API remains the source of truth. The browser downloads the actual PDF
-  returned by the backend and never fabricates successful results.
-- FastAPI `BackgroundTasks` is not a durable job queue. In-progress work is
-  not guaranteed to resume after a process crash. A production deployment
-  would use a durable worker system such as Celery with a message broker.
-- Authentication, deployment infrastructure, and durable queues are outside
-  this assignment's scope.
+The import operation does not itself create a certificate-generation job. The user reviews and confirms the imported records before submitting them through the existing job-generation workflow.
 
-## Full-Stack Verification
+The intended student-list format is a table with columns similar to:
 
-From the project root:
+| Student Name | Email Address |
+|---|---|
+| Asif Ali | asif@example.com |
+| Rahul Kumar | rahul@example.com |
+
+The parser may recognize equivalent column headings, depending on the implemented extraction rules. The upload endpoint should reject invalid files and handle documents with missing or malformed student information.
+
+Scanned PDFs require OCR, which is outside the basic text-extraction workflow unless separately implemented.
+
+## 9. Run Automated Tests
+
+From the project root, activate the backend virtual environment and run:
 
 ```powershell
 python -m pytest -v
 ```
 
-From `frontend`:
+The backend test suite covers health checks, request validation, job creation, progress tracking, PDF downloads, individual-recipient failure isolation, and 404 handling.
+
+The PDF import functionality should also be tested for valid uploads, invalid files, malformed records, duplicate emails, and file-size limits.
+
+Run the frontend production build:
 
 ```powershell
-npm install
+cd frontend
 npm run build
 ```
 
-The backend tests cover validation, job processing, progress, failure
-isolation, 404 handling, and real PDF downloads. The frontend build verifies
-the production bundle. With both servers running, manually exercise valid
-submission, polling, partial failure, and PDF download flows.
+Run any configured frontend lint or test commands from the frontend directory.
 
-## Current Scope
+## 10. Data Storage
 
-This repository contains the FastAPI backend and a separate React/Vite
-frontend. The API can also be explored through Swagger UI.
+The application stores data locally.
 
-The application is intended as a simple bulk certificate-generation assignment and development project, not a production-hardened distributed job-processing service.
+**SQLite database:** `certificate_generator.db`
+
+Stores generation jobs, course details, recipient names and email addresses, processing statuses, success/failure counts, file paths, and error messages.
+
+**Generated PDF files:** `generated_certificates/`
+
+Stores individual PDF certificates created by the application. The database stores the paths to these files rather than their binary contents.
+
+Uploaded student-list PDFs are processed for extraction and should not be retained permanently unless the implementation explicitly requires it.
+
+The database and generated PDFs remain on the backend computer until they are deleted. Removing the database does not automatically delete generated PDFs, and removing PDFs does not automatically remove database records.
+
+## 11. Important Design Decisions
+
+### Relational database
+
+SQLite and SQLAlchemy are used to persist job and recipient information. Jobs and recipient outcomes are stored separately, with each recipient linked to its parent job through a foreign key.
+
+This supports per-recipient status tracking and job-level progress calculation.
+
+### Shared generation workflow
+
+Manual entry and PDF import both produce the same recipient data structure and use the existing job-generation endpoint. This avoids maintaining separate certificate-generation implementations.
+
+### Input validation
+
+Pydantic validates API requests on the backend. Frontend validation improves usability, but the server remains authoritative.
+
+PDF-imported records are previewed and corrected before job submission.
+
+### Individual failure isolation
+
+Each recipient is processed independently. If generating one certificate fails, the application records the error and continues processing the remaining recipients.
+
+### Local file storage
+
+ReportLab generates individual PDF files in the local output directory. This is simple for a development assignment but requires additional storage management for a larger production deployment.
+
+### Background processing
+
+FastAPI `BackgroundTasks` is used to process generation jobs after the API accepts the request. It is suitable for this simple application but is not a durable job queue. If the process stops unexpectedly, unfinished jobs are not guaranteed to resume automatically.
+
+A production system could use a durable task queue and worker processes.
+
+### Theme support
+
+The frontend supports dark and light themes to improve usability in different environments.
+
+## 12. Limitations
+
+- The application uses local SQLite and filesystem storage.
+- The current background-task approach does not guarantee recovery of interrupted jobs.
+- PDF import depends on the layout and text extractability of the uploaded document.
+- Scanned PDFs require OCR if image-based student lists must be supported.
+- The application is intended as a development and assignment project rather than a production-hardened multi-user service.
+
+## License
+
+Add an appropriate license if you intend to distribute or reuse this project publicly.
