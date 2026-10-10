@@ -1,0 +1,8 @@
+
+fastapi
+uvicorn[standard]
+sqlalchemy
+reportlab
+pytest
+httpx
+  
