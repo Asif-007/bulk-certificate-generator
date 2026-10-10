@@ -1,5 +1,5 @@
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -24,8 +24,10 @@ class GenerationJob(Base):
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
-    )
+    DateTime(timezone=True),
+    default=lambda: datetime.now(timezone.utc),
+    nullable=False,
+)
 
     recipients: Mapped[list["RecipientResult"]] = relationship(
         back_populates="job",
