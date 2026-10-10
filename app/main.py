@@ -1,15 +1,16 @@
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import BackgroundTasks, Depends, FastAPI, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import models
+from app.certificates import OUTPUT_DIR, generate_certificate
 from app.database import Base, SessionLocal, engine, get_db
 from app.schemas import CertificateRequest
-from app import models
-from app.certificates import generate_certificate
 
 
 @asynccontextmanager
@@ -42,17 +43,14 @@ def validate_request(request: CertificateRequest):
             "completion_date": request.certificate.completion_date,
         },
         "recipients": [
-            {
-                "name": recipient.name,
-                "email": str(recipient.email),
-            }
-            for recipient in request.recipients
+            {"name": item.name, "email": str(item.email)}
+            for item in request.recipients
         ],
     }
 
 
 def process_generation_job(job_id: int) -> None:
-    """Generate certificates and record each recipient's outcome."""
+    """Generate PDFs and persist each recipient's outcome."""
 
     with SessionLocal() as db:
         job = db.get(models.GenerationJob, job_id)
@@ -76,7 +74,6 @@ def process_generation_job(job_id: int) -> None:
                 continue
 
             try:
-                # Generate the PDF for this recipient.
                 file_path = generate_certificate(
                     recipient_name=recipient.name,
                     course_name=job.course_name,
@@ -90,7 +87,6 @@ def process_generation_job(job_id: int) -> None:
                 job.success_count += 1
 
             except Exception as exc:
-                # Record the failure and continue with the next recipient.
                 recipient.status = "failed"
                 recipient.file_path = None
                 recipient.error_message = (
@@ -98,8 +94,6 @@ def process_generation_job(job_id: int) -> None:
                 )[:1000]
                 job.failed_count += 1
 
-            # Persist each outcome so progress survives a normal restart
-            # after that particular record has been committed.
             db.commit()
 
         if job.failed_count == 0:
@@ -153,3 +147,101 @@ def create_generation_job(
         "total_count": job.total_count,
         "message": "Generation job accepted.",
     }
+
+
+@app.get("/jobs/{job_id}")
+def get_job_status(job_id: int, db: Session = Depends(get_db)):
+    job = db.get(models.GenerationJob, job_id)
+
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Generation job not found.",
+        )
+
+    processed_count = job.success_count + job.failed_count
+    progress = (
+        round(processed_count / job.total_count * 100, 2)
+        if job.total_count
+        else 0.0
+    )
+
+    recipients = [
+        {
+            "recipient_id": recipient.id,
+            "name": recipient.name,
+            "email": recipient.email,
+            "status": recipient.status,
+            "error_message": recipient.error_message,
+            "certificate_url": (
+                f"/jobs/{job.id}/recipients/{recipient.id}/certificate"
+                if recipient.status == "succeeded"
+                else None
+            ),
+        }
+        for recipient in job.recipients
+    ]
+
+    return {
+        "job_id": job.id,
+        "status": job.status,
+        "course_name": job.course_name,
+        "issuer": job.issuer,
+        "completion_date": job.completion_date,
+        "total_count": job.total_count,
+        "success_count": job.success_count,
+        "failed_count": job.failed_count,
+        "processed_count": processed_count,
+        "progress_percent": progress,
+        "recipients": recipients,
+    }
+
+
+@app.get("/jobs/{job_id}/recipients/{recipient_id}/certificate")
+def download_certificate(
+    job_id: int,
+    recipient_id: int,
+    db: Session = Depends(get_db),
+):
+    recipient = db.scalar(
+        select(models.RecipientResult).where(
+            models.RecipientResult.id == recipient_id,
+            models.RecipientResult.job_id == job_id,
+        )
+    )
+
+    if recipient is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Recipient result not found for this job.",
+        )
+
+    if recipient.status != "succeeded" or not recipient.file_path:
+        raise HTTPException(
+            status_code=404,
+            detail="Certificate is not available.",
+        )
+
+    # Resolve and restrict the path to the certificate output directory.
+    output_root = OUTPUT_DIR.resolve()
+    file_path = Path(recipient.file_path).resolve()
+
+    try:
+        file_path.relative_to(output_root)
+    except ValueError:
+        raise HTTPException(
+            status_code=404,
+            detail="Certificate file not found.",
+        ) from None
+
+    if not file_path.is_file() or file_path.suffix.lower() != ".pdf":
+        raise HTTPException(
+            status_code=404,
+            detail="Certificate file not found.",
+        )
+
+    return FileResponse(
+        path=file_path,
+        media_type="application/pdf",
+        filename=f"certificate_{recipient.id}.pdf",
+    )
