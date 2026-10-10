@@ -1,12 +1,25 @@
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
+from app.database import Base, engine
 from app.schemas import CertificateRequest
+from app import models  # Registers the models with SQLAlchemy's metadata.
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Create missing tables when the application starts.
+    Base.metadata.create_all(bind=engine)
+    yield
+
 
 app = FastAPI(
     title="Bulk Certificate Generator",
     description="API for generating and retrieving bulk certificates.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 
